@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek-V3 671B Architecture Visualization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        h1 { color: #58a6ff; margin-bottom: 0.5rem; font-size: 1.8rem; }
+        h2 { color: #79c0ff; margin: 1.5rem 0 0.5rem; font-size: 1.3rem; }
+        .subtitle { color: #8b949e; margin-bottom: 2rem; }
+        .arch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 1.5rem 0; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 1.5rem; }
+        .card h3 { color: #58a6ff; margin-bottom: 0.75rem; font-size: 1.1rem; }
+        .card p { color: #8b949e; line-height: 1.6; margin-bottom: 0.5rem; }
+        .stat { display: inline-block; background: #21262d; border-radius: 4px; padding: 0.25rem 0.75rem; margin: 0.25rem; font-family: monospace; color: #79c0ff; font-size: 0.85rem; }
+        .layer-stack { display: flex; flex-direction: column; gap: 4px; margin: 1rem 0; }
+        .layer { padding: 0.5rem 1rem; border-radius: 4px; font-size: 0.85rem; text-align: center; }
+        .layer-dense { background: #1f3a2f; border: 1px solid #238636; color: #3fb950; }
+        .layer-moe { background: #2a1f3a; border: 1px solid #8b5cf6; color: #a78bfa; }
+        .layer-embed { background: #3a2a1f; border: 1px solid #d97706; color: #fbbf24; }
+        .layer-mtp { background: #1f2a3a; border: 1px solid #2563eb; color: #60a5fa; }
+        .flow-diagram { display: flex; align-items: center; gap: 0.5rem; margin: 1rem 0; flex-wrap: wrap; }
+        .flow-box { background: #21262d; border: 1px solid #30363d; border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.8rem; }
+        .flow-arrow { color: #484f58; font-size: 1.2rem; }
+        .highlight { color: #ffa657; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid #21262d; }
+        th { color: #58a6ff; font-weight: 600; }
+        td { color: #c9d1d9; font-family: monospace; font-size: 0.9rem; }
+        .full-width { grid-column: 1 / -1; }
+        .badge { display: inline-block; background: #1f6feb; color: white; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.75rem; margin-left: 0.5rem; }
+        .badge-red { background: #da3633; }
+        .badge-green { background: #238636; }
+        .badge-purple { background: #8957e5; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DeepSeek-V3 671B Architecture</h1>
+        <p class="subtitle">arXiv: 2412.19437 | 671B total parameters, ~37B active per token</p>
+
+        <div class="arch-grid">
+            <!-- Model Overview -->
+            <div class="card">
+                <h3>Model Overview</h3>
+                <p>DeepSeek-V3 is a Mixture of Experts (MoE) language model with three key innovations:</p>
+                <p><span class="highlight">MLA</span> - Multi-head Latent Attention for KV cache compression</p>
+                <p><span class="highlight">Grouped MoE</span> - 256 experts with grouped top-K routing</p>
+                <p><span class="highlight">MTP</span> - Multi-Token Prediction for speculative decoding</p>
+                <div style="margin-top: 1rem;">
+                    <span class="stat">671B params</span>
+                    <span class="stat">61 layers</span>
+                    <span class="stat">7168 hidden</span>
+                    <span class="stat">128 heads</span>
+                    <span class="stat">129K vocab</span>
+                </div>
+            </div>
+
+            <!-- Layer Structure -->
+            <div class="card">
+                <h3>Layer Structure</h3>
+                <div class="layer-stack">
+                    <div class="layer layer-embed">Embedding (129280 x 7168)</div>
+                    <div class="layer layer-dense">Dense Layer 0-2: MLA + SwiGLU FFN (4x)</div>
+                    <div class="layer layer-moe">MoE Layer 3-60: MLA + MoE FFN (256 experts)</div>
+                    <div class="layer layer-embed">RMSNorm + LM Head (7168 x 129280)</div>
+                    <div class="layer layer-mtp">MTP Head (1 layer)</div>
+                </div>
+                <p style="font-size: 0.85rem;">3 dense + 58 MoE = 61 total layers</p>
+            </div>
+
+            <!-- MLA Details -->
+            <div class="card full-width">
+                <h3>Multi-head Latent Attention (MLA) <span class="badge badge-green">All 61 layers</span></h3>
+                <p>MLA compresses KV cache via low-rank latent projection, reducing per-token cache by ~32x vs standard MHA.</p>
+                <div class="flow-diagram">
+                    <div class="flow-box">x (7168)</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box" style="border-color: #238636;">W_dkv: 7168&rarr;512</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box" style="border-color: #ffa657;">c_kv (512) <br><small>KV Cache</small></div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box">W_uk: 512&rarr;16384<br><small>K nope</small></div>
+                    <span class="flow-arrow">+</span>
+                    <div class="flow-box">W_uv: 512&rarr;16384<br><small>V</small></div>
+                </div>
+                <div class="flow-diagram">
+                    <div class="flow-box">x (7168)</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box">W_q: 7168&rarr;24576</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box">Q (128 heads x 192)</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box" style="border-color: #da3633;">Attention</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box">W_o: 16384&rarr;7168</div>
+                </div>
+                <table>
+                    <tr><th>Parameter</th><th>Value</th><th>Description</th></tr>
+                    <tr><td>kv_lora_rank</td><td>512</td><td>Compressed KV dimension</td></tr>
+                    <tr><td>qk_rope_head_dim</td><td>64</td><td>RoPE-applied Q/K dimension</td></tr>
+                    <tr><td>qk_nope_head_dim</td><td>128</td><td>Non-RoPE Q/K dimension</td></tr>
+                    <tr><td>v_head_dim</td><td>128</td><td>Value head dimension</td></tr>
+                    <tr><td>num_heads</td><td>128</td><td>Attention heads</td></tr>
+                    <tr><td>KV cache/token</td><td>1024 B</td><td>vs 82 KB for standard MHA (80x reduction)</td></tr>
+                </table>
+            </div>
+
+            <!-- MoE Details -->
+            <div class="card full-width">
+                <h3>Mixture of Experts with Grouped Routing <span class="badge badge-purple">58 MoE layers</span></h3>
+                <p>DeepSeek-V3 uses 256 fine-grained experts organized into 8 groups with hierarchical top-K routing.</p>
+                <div class="flow-diagram">
+                    <div class="flow-box">x (7168)</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box" style="border-color: #8957e5;">Gate: 7168&rarr;256</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box">Group Score<br><small>8 groups</small></div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box" style="border-color: #ffa657;">Top-4 Groups</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box">Top-2/Group</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box" style="border-color: #238636;">8 Active Experts</div>
+                </div>
+                <div class="flow-diagram">
+                    <div class="flow-box">Token</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box">Expert SwiGLU<br><small>7168&rarr;2048&rarr;7168</small></div>
+                    <span class="flow-arrow">&times;8</span>
+                    <div class="flow-box">Weighted Sum</div>
+                    <span class="flow-arrow">+</span>
+                    <div class="flow-box" style="border-color: #238636;">Shared Expert<br><small>7168&rarr;4096&rarr;7168</small></div>
+                </div>
+                <table>
+                    <tr><th>Parameter</th><th>Value</th><th>Description</th></tr>
+                    <tr><td>n_routed_experts</td><td>256</td><td>Total routed experts</td></tr>
+                    <tr><td>num_experts_per_tok</td><td>8</td><td>Active experts per token</td></tr>
+                    <tr><td>n_group</td><td>8</td><td>Expert groups</td></tr>
+                    <tr><td>topk_group</td><td>4</td><td>Selected groups per token</td></tr>
+                    <tr><td>moe_intermediate</td><td>2048</td><td>Per-expert FFN hidden dim</td></tr>
+                    <tr><td>n_shared_experts</td><td>1</td><td>Always-active shared expert</td></tr>
+                </table>
+            </div>
+
+            <!-- FP8 -->
+            <div class="card">
+                <h3>FP8 Training <span class="badge badge-red">e4m3</span></h3>
+                <p>DeepSeek-V3 uses FP8 (e4m3) precision with block-wise quantization for both forward and backward passes.</p>
+                <table>
+                    <tr><td>Format</td><td>e4m3 (4-bit exp, 3-bit mantissa)</td></tr>
+                    <tr><td>Block Size</td><td>128 x 128</td></tr>
+                    <tr><td>Scaling</td><td>Per-block FP32 scales</td></tr>
+                    <tr><td>Accumulation</td><td>FP32</td></tr>
+                    <tr><td>Peak TFLOPS</td><td>1979 on H100</td></tr>
+                </table>
+            </div>
+
+            <!-- MTP -->
+            <div class="card">
+                <h3>Multi-Token Prediction <span class="badge">1 layer</span></h3>
+                <p>MTP predicts one additional token beyond standard next-token prediction, enabling speculative decoding.</p>
+                <div class="flow-diagram">
+                    <div class="flow-box">Hidden State</div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box">MTP Proj<br><small>7168&rarr;7168</small></div>
+                    <span class="flow-arrow">&rarr;</span>
+                    <div class="flow-box">Shared LM Head<br><small>7168&rarr;129280</small></div>
+                </div>
+                <p style="margin-top: 0.5rem; font-size: 0.85rem;">Overhead: ~0.3% of total model FLOPs</p>
+            </div>
+
+            <!-- Training Stats -->
+            <div class="card full-width">
+                <h3>Training Statistics</h3>
+                <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                    <div><span class="stat">14.8T tokens</span> Training data</div>
+                    <div><span class="stat">2048 H800 GPUs</span> Cluster</div>
+                    <div><span class="stat">2.788M GPU-hours</span> Total compute</div>
+                    <div><span class="stat">163,840 max seq</span> Context (YaRN)</div>
+                    <div><span class="stat">~$5.6M</span> Estimated cost</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

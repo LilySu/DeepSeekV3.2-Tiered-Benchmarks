@@ -1,0 +1,59 @@
+# DeepSeek-V3 benchmark and inference container for H100 GPUs.
+#
+# Includes all kernel dependencies:
+#   - FlashMLA (DeepSeek's MLA attention kernel)
+#   - DeepGEMM (FP8 grouped GEMM for MoE)
+#   - FlashInfer (alternative attention kernel)
+#   - Triton (for custom kernels)
+#   - Unsloth (fast LoRA and fused kernels)
+#
+# Build:
+#   docker build -f Dockerfile.h100 -t deepseekv3-bench .
+#
+# Run (single GPU):
+#   docker run --gpus '"device=0"' deepseekv3-bench python benchmark/run_all.py
+#
+# Run (multi-GPU):
+#   docker run --gpus all deepseekv3-bench python benchmark/run_all.py --multi-gpu
+
+FROM nvcr.io/nvidia/pytorch:24.07-py3
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+RUN pip install --no-cache-dir \
+    safetensors \
+    tokenizers \
+    sentencepiece \
+    triton>=3.0.0 \
+    einops \
+    ninja \
+    packaging
+
+# FlashMLA — DeepSeek's attention kernel for MLA
+RUN pip install --no-cache-dir flash-mla --no-build-isolation || \
+    (git clone https://github.com/deepseek-ai/FlashMLA.git /tmp/flashmla && \
+     cd /tmp/flashmla && pip install -e . && rm -rf /tmp/flashmla) || true
+
+# FlashInfer — alternative attention kernel with MLA support
+RUN pip install --no-cache-dir flashinfer -i https://flashinfer.ai/whl/cu124/torch2.4/ || true
+
+# DeepGEMM — FP8 grouped GEMM for MoE on Hopper
+RUN pip install --no-cache-dir deepgemm || \
+    (git clone https://github.com/deepseek-ai/DeepGEMM.git /tmp/deepgemm && \
+     cd /tmp/deepgemm && pip install -e . && rm -rf /tmp/deepgemm) || true
+
+# Unsloth — fast LoRA and fused kernels
+RUN pip install --no-cache-dir unsloth || true
+
+# Copy project
+WORKDIR /workspace/deepseekv3_2
+COPY . .
+
+# Default: run smoke test
+CMD ["python", "-c", "import sys; sys.path.insert(0, 'deepseekv3_2-raw-decoupled-from-hf'); from model import DeepSeekV3ForCausalLM; print('DeepSeek-V3 model loads successfully')"]
